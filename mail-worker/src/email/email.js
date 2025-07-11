@@ -25,8 +25,7 @@ export async function email(message, env, ctx) {
 			forwardStatus,
 			forwardEmail,
 			ruleEmail,
-			ruleType,
-			r2Domain
+			ruleType
 		} = await settingService.query({ env });
 
 		if (receive === settingConst.receive.CLOSE) {
@@ -45,6 +44,8 @@ export async function email(message, env, ctx) {
 		}
 
 		const email = await PostalMime.parse(content);
+
+		console.log(email)
 
 		const toName = email.to.find(item => item.address === message.to)?.name || '';
 
@@ -81,12 +82,13 @@ export async function email(message, env, ctx) {
 			}
 		}
 
-		let emailRow = await emailService.receive({ env }, params, cidAttachments, r2Domain);
+		let emailRow = await emailService.receive({ env }, params, cidAttachments);
 
 		attachments.forEach(attachment => {
 			attachment.emailId = emailRow.emailId;
 			attachment.userId = emailRow.userId;
 			attachment.accountId = emailRow.accountId;
+			attachment.type = attachment.contentId ? attConst.type.EMBED : attConst.type.ATT;
 		});
 
 		if (attachments.length > 0 && env.r2) {

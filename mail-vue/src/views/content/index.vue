@@ -35,7 +35,7 @@
           </div>
           <el-scrollbar class="htm-scrollbar" :class="email.attList.length === 0 ? 'bottom-distance' : ''">
             <ShadowHtml :html="formatImage(email.content)" v-if="email.content" />
-            <pre v-else class="email-text" >{{email.text}}</pre>
+            <span v-else class="email-text" >{{email.text}}</span>
           </el-scrollbar>
           <div class="att" v-if="email.attList.length > 0">
             <div class="att-title">
@@ -113,9 +113,9 @@ function toMessage(message) {
 }
 
 function formatImage(content) {
-  content = content || '';
+  content = content ||  ''
   const domain = settingStore.settings.r2Domain;
-  return  content.replace(/{{domain}}/g, domain + '/');
+  return content.replace('{{domain}}', domain + '/');
 }
 
 function showImage(key) {
@@ -380,10 +380,8 @@ const handleDelete = () => {
 }
 
 .email-text {
-  font-family: inherit;
   white-space: pre-wrap;
   word-break: break-word;
-  margin: 0;
 }
 
 .bottom-distance {
