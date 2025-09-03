@@ -1,27 +1,33 @@
 <template>
   <div class="account-box">
-    <div class="head-opt" >
-      <Icon v-perm="'account:add'" class="icon" icon="ion:add-outline" width="23" height="23" @click="add" />
-      <Icon class="icon" icon="ion:reload" width="18" height="18"  @click="refresh" />
+    <div class="head-opt">
+      <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
+      <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
     </div>
-    <el-scrollbar class="scrollbar">
-      <div v-infinite-scroll="getAccountList" :infinite-scroll-distance="600"  :infinite-scroll-immediate="false">
-        <el-card class="item" :class="itemBg(item.accountId)" v-for="item in accounts" :key="item.accountId" @click="changeAccount(item)">
-          <div class="account" >
+    <el-scrollbar class="scrollbar" ref="scrollbarRef">
+      <div v-infinite-scroll="getAccountList" :infinite-scroll-distance="600" :infinite-scroll-immediate="false">
+        <el-card class="item" :class="itemBg(item.accountId)" v-for="item in accounts" :key="item.accountId"
+                 @click="changeAccount(item)">
+          <div class="account">
             {{ item.email }}
           </div>
           <div class="opt">
             <div class="send-email" @click.stop>
-              <Icon  icon="eva:email-fill" width="22" height="22" color="#fbbd08" />
+              <Icon icon="eva:email-fill" width="22" height="22" color="#fccb1a"/>
             </div>
             <div class="settings" @click.stop>
-              <Icon icon="streamline-ultimate-color:copy-paste-1" width="19" height="19" @click.stop="copyAccount(item.email)"/>
-              <el-dropdown>
-                <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399" />
-                <template #dropdown >
+              <Icon icon="fluent-color:clipboard-24" width="22" height="22" @click.stop="copyAccount(item.email)"/>
+              <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"
+                    v-if="showNullSetting(item)"/>
+              <el-dropdown v-else>
+                <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"/>
+                <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item @click="openSetName(item)">改名</el-dropdown-item>
-                    <el-dropdown-item v-if="item.accountId !== userStore.user.accountId && hasPerm('account:delete')" @click="remove(item)">删除</el-dropdown-item>
+                    <el-dropdown-item v-if="hasPerm('email:send')" @click="openSetName(item)">{{ $t('rename') }}
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="item.accountId !== userStore.user.accountId && hasPerm('account:delete')"
+                                      @click="remove(item)">{{ $t('delete') }}
+                    </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -31,13 +37,13 @@
 
         <!-- Initial Loading Skeleton -->
         <template v-if="loading">
-          <el-skeleton v-for="i in 3" :key="i"  animated>
+          <el-skeleton v-for="i in skeletonRows" :key="i" animated>
             <template #template>
               <el-card class="item">
-                <el-skeleton-item variant="p" style="width: 70%; height: 20px; margin-bottom: 20px" />
+                <el-skeleton-item variant="p" style="width: 70%; height: 20px; margin-bottom: 25px"/>
                 <div style="display: flex; justify-content: space-between">
-                  <el-skeleton-item variant="text" style="width: 20px" />
-                  <el-skeleton-item variant="text" style="width: 20px" />
+                  <el-skeleton-item variant="text" style="width: 20px"/>
+                  <el-skeleton-item variant="text" style="width: 20px"/>
                 </div>
               </el-card>
             </template>
@@ -49,10 +55,10 @@
           <el-skeleton animated>
             <template #template>
               <el-card class="item">
-                <el-skeleton-item variant="p" style="width: 70%; height: 20px; margin-bottom: 20px" />
+                <el-skeleton-item variant="p" style="width: 70%; height: 20px; margin-bottom: 20px"/>
                 <div style="display: flex; justify-content: space-between">
-                  <el-skeleton-item variant="text" style="width: 20px" />
-                  <el-skeleton-item variant="text" style="width: 20px" />
+                  <el-skeleton-item variant="text" style="width: 20px"/>
+                  <el-skeleton-item variant="text" style="width: 20px"/>
                 </div>
               </el-card>
             </template>
@@ -60,49 +66,61 @@
         </template>
 
         <div class="noLoading" v-if="noLoading && accounts.length > 0">
-          <div>没有更多数据了</div>
+          <div>{{ $t('noMoreData') }}</div>
         </div>
         <div class="empty" v-if="noLoading && accounts.length === 0">
-          <el-empty description="没有任何邮件" />
+          <el-empty :description="$t('noMessagesFound')"/>
         </div>
       </div>
 
     </el-scrollbar>
-    <el-dialog v-model="showAdd" title="添加邮箱" >
-        <div class="container">
-          <el-input v-model="addForm.email" ref="addRef" type="text" placeholder="邮箱" autocomplete="off">
-            <template #append>
-              <div  @click.stop="openSelect">
-                <el-select
-                    ref="mySelect"
-                    v-model="addForm.suffix"
-                    placeholder="请选择"
-                    class="select"
-                >
-                  <el-option
-                      v-for="item in domainList"
-                      :key="item"
-                      :label="item"
-                      :value="item"
-                  />
-                </el-select>
-                <div style="color: #333">
-                  <span >{{addForm.suffix}}</span>
-                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20" />
-                </div>
+    <el-dialog v-model="showAdd" :title="$t('addAccount')">
+      <div class="container">
+        <el-input v-model="addForm.email" ref="addRef" type="text" :placeholder="$t('emailAccount')" autocomplete="off">
+          <template #append>
+            <div @click.stop="openSelect">
+              <el-select
+                  ref="mySelect"
+                  v-model="addForm.suffix"
+                  :placeholder="$t('select')"
+                  class="select"
+              >
+                <el-option
+                    v-for="item in domainList"
+                    :key="item"
+                    :label="item"
+                    :value="item"
+                />
+              </el-select>
+              <div>
+                <span>{{ addForm.suffix }}</span>
+                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
               </div>
-            </template>
-          </el-input>
-          <el-button class="btn" type="primary" @click="submit" :loading="addLoading"
-          >添加
-          </el-button>
-        </div>
+            </div>
+          </template>
+        </el-input>
+        <el-button class="btn" type="primary" @click="submit" :loading="addLoading"
+        >{{ $t('add') }}
+        </el-button>
+      </div>
       <div
           class="add-email-turnstile"
           :class="verifyShow ? 'turnstile-show' : 'turnstile-hide'"
           :data-sitekey="settingStore.settings.siteKey"
           data-callback="onTurnstileSuccess"
-      ></div>
+          data-error-callback="onTurnstileError"
+      >
+        <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed') }}</span>
+      </div>
+    </el-dialog>
+    <el-dialog v-model="setNameShow" :title="$t('changeUserName')">
+      <div class="container">
+        <el-input v-model="accountName" type="text" :placeholder="$t('username')" autocomplete="off">
+        </el-input>
+        <el-button class="btn" type="primary" @click="setName" :loading="setNameLoading"
+        >{{ $t('save') }}
+        </el-button>
+      </div>
     </el-dialog>
     <el-dialog v-model="setNameShow" title="修改用户名" >
       <div class="container">
@@ -119,12 +137,16 @@
 import {Icon} from "@iconify/vue";
 import {nextTick, reactive, ref, watch} from "vue";
 import {accountList, accountAdd, accountDelete, accountSetName} from "@/request/account.js";
+import {sleep} from "@/utils/time-utils.js"
 import {isEmail} from "@/utils/verify-utils.js";
+import {copyText} from "@/utils/clipboard-utils.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useAccountStore} from "@/store/account.js";
 import {useUserStore} from "@/store/user.js";
-import hasPerm from "@/utils/perm.js";
+import {hasPerm} from "@/perm/perm.js"
+import {useI18n} from "vue-i18n";
 
+const {t} = useI18n();
 const userStore = useUserStore();
 const accountStore = useAccountStore();
 const settingStore = useSettingStore();
@@ -140,13 +162,18 @@ const setNameShow = ref(false)
 const setNameLoading = ref(false)
 const accountName = ref(null)
 const addRef = ref({})
+const scrollbarRef = ref({})
 let account = null
 let turnstileId = null
+const botJsError = ref(false)
 let verifyToken = ''
+let verifyErrorCount = 0
+let first = true
 const addForm = reactive({
   email: '',
   suffix: settingStore.domainList[0]
 })
+let skeletonRows = 10
 const queryParams = {
   accountId: 0,
   size: 20
@@ -167,12 +194,32 @@ const openSelect = () => {
   mySelect.value.toggleMenu()
 }
 
+window.onTurnstileError = (e) => {
+  if (verifyErrorCount >= 4) {
+    return
+  }
+  verifyErrorCount++
+  console.warn('人机验加载失败', e)
+  setTimeout(() => {
+    nextTick(() => {
+      if (!turnstileId) {
+        turnstileId = window.turnstile.render('.add-email-turnstile')
+      } else {
+        window.turnstile.reset(turnstileId);
+      }
+    })
+  }, 1500)
+};
+
 window.onTurnstileSuccess = (token) => {
   verifyToken = token;
-  setTimeout(() => {
-    verifyShow.value = false
-  },1500)
 };
+
+function getSkeletonRows() {
+  if (accounts.length > 20) return skeletonRows = 20
+  if (accounts.length === 0) return skeletonRows = 1
+  skeletonRows = accounts.length
+}
 
 function setName() {
 
@@ -185,7 +232,7 @@ function setName() {
 
   if (!name) {
     ElMessage({
-      message: '用户名不能为空',
+      message: t('emptyUserNameMsg'),
       type: 'error',
       plain: true,
     })
@@ -193,7 +240,7 @@ function setName() {
   }
 
   setNameLoading.value = true
-  accountSetName(account.accountId,name).then(() => {
+  accountSetName(account.accountId, name).then(() => {
     account.name = name
     setNameShow.value = false
 
@@ -202,19 +249,23 @@ function setName() {
     }
 
     ElMessage({
-      message: "保存成功",
+      message: t('saveSuccessMsg'),
       type: "success",
       plain: true
     })
-  }).finally(()=> {
+  }).finally(() => {
     setNameLoading.value = false
   })
 }
 
-function openSetName (accountItem) {
+function openSetName(accountItem) {
   accountName.value = accountItem.name
   account = accountItem
   setNameShow.value = true
+}
+
+function showNullSetting(item) {
+  return !hasPerm('email:send') && !(item.accountId !== userStore.user.accountId && hasPerm('account:delete'))
 }
 
 function itemBg(accountId) {
@@ -222,9 +273,9 @@ function itemBg(accountId) {
 }
 
 function remove(account) {
-  ElMessageBox.confirm(`确认删除${account.email}吗?`, {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
+  ElMessageBox.confirm(t('delConfirm', {msg: account.email}), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
     type: 'warning'
   }).then(() => {
     accountDelete(account.accountId).then(() => {
@@ -234,7 +285,7 @@ function remove(account) {
         getAccountList()
       }
       ElMessage({
-        message: '删除成功',
+        message: t('delSuccessMsg'),
         type: 'success',
         plain: true,
       })
@@ -250,9 +301,12 @@ function refresh() {
   followLoading.value = false
   noLoading.value = false
   queryParams.accountId = 0
+  getSkeletonRows();
+  scrollbarRef.value.setScrollTop(0)
   accounts.splice(0, accounts.length)
   getAccountList()
 }
+
 function changeAccount(account) {
   accountStore.currentAccountId = account.accountId
   accountStore.currentAccount = account
@@ -262,21 +316,21 @@ function add() {
   showAdd.value = true
   setTimeout(() => {
     addRef.value.focus()
-  },100)
+  }, 100)
 }
 
 async function copyAccount(account) {
   try {
-    await navigator.clipboard.writeText(account);
+    await copyText(account);
     ElMessage({
-      message: '复制成功',
+      message: t('copySuccessMsg'),
       type: 'success',
       plain: true,
     })
   } catch (err) {
-    console.error('复制失败:', err);
+    console.error(`${t('copyFailMsg')}:`, err);
     ElMessage({
-      message: '复制失败',
+      message: t('copyFailMsg'),
       type: 'error',
       plain: true,
     })
@@ -289,11 +343,21 @@ function getAccountList() {
 
   if (accounts.length === 0) {
     loading.value = true
-  }else {
+  } else {
     followLoading.value = true
   }
 
-  accountList(queryParams.accountId,queryParams.size).then(list => {
+  let start = Date.now();
+
+  accountList(queryParams.accountId, queryParams.size).then(async list => {
+
+    let end = Date.now();
+    let duration = end - start;
+    if (duration < 500) {
+      await sleep(500 - duration)
+
+    }
+
     if (list.length < queryParams.size) {
       noLoading.value = true
     }
@@ -305,6 +369,7 @@ function getAccountList() {
 
     loading.value = false
     followLoading.value = false
+    first = false
   }).catch(() => {
     loading.value = false
     followLoading.value = false
@@ -312,54 +377,76 @@ function getAccountList() {
 }
 
 
-function submit()  {
+function submit() {
 
-  if (!addForm.email){
+  if (!addForm.email) {
     ElMessage({
-      message: "邮箱不能为空",
+      message: t('emptyEmailMsg'),
       type: "error",
       plain: true
     })
     return
   }
 
-  if (!isEmail(addForm.email+addForm.suffix)) {
+  if (!isEmail(addForm.email + addForm.suffix)) {
     ElMessage({
-      message: "非法邮箱",
+      message: t('notEmailMsg'),
       type: "error",
       plain: true
     })
     return
   }
-  if (!verifyToken && settingStore.settings.addEmailVerify === 0) {
-    verifyShow.value = true
-    if (!turnstileId) {
+
+  if (!verifyToken && (settingStore.settings.addEmailVerify === 0 || (settingStore.settings.addEmailVerify === 2 && settingStore.settings.addVerifyOpen))) {
+    if (!verifyShow.value) {
+      verifyShow.value = true
       nextTick(() => {
-        turnstileId = window.turnstile.render('.add-email-turnstile')
+        if (!turnstileId) {
+          try {
+            turnstileId = window.turnstile.render('.add-email-turnstile')
+          } catch (e) {
+            botJsError.value = true
+            console.log('人机验证js加载失败')
+          }
+        } else {
+          window.turnstile.reset('.add-email-turnstile')
+        }
       })
-    } else {
-      window.turnstile.reset(turnstileId)
+    } else if (!botJsError.value) {
+      ElMessage({
+        message: t('botVerifyMsg'),
+        type: "error",
+        plain: true
+      })
     }
     return;
   }
 
   addLoading.value = true
-  accountAdd(addForm.email+addForm.suffix,verifyToken).then(account => {
+  accountAdd(addForm.email + addForm.suffix, verifyToken).then(account => {
     addLoading.value = false
     showAdd.value = false
     addForm.email = ''
     accounts.push(account)
     verifyToken = ''
+    settingStore.settings.addVerifyOpen = account.addVerifyOpen
     ElMessage({
-      message: "添加成功",
+      message: t('addSuccessMsg'),
       type: "success",
       plain: true
     })
+    verifyShow.value = false
     userStore.refreshUserInfo()
   }).catch(res => {
     if (res.code === 400) {
       verifyToken = ''
-      window.turnstile.reset(turnstileId)
+      if (turnstileId) {
+        window.turnstile.reset(turnstileId)
+      } else {
+        nextTick(() => {
+          turnstileId = window.turnstile.render('.add-email-turnstile')
+        })
+      }
       verifyShow.value = true
     }
     addLoading.value = false
@@ -375,23 +462,35 @@ path[fill="#ffdda1"] {
 .account-box {
 
   border-right: 1px solid var(--el-border-color) !important;
-  background-color: #FFF;
+  background-color: var(--el-bg-color);
   height: 100%;
   overflow: hidden;
+
   .head-opt {
     display: flex;
     align-items: center;
     height: 38px;
-    box-shadow: inset 0 -1px 0 0 rgba(100, 121, 143, 0.12);
+    box-shadow: var(--header-actions-border);
     padding-left: 10px;
     padding-right: 10px;
-    .icon{
+
+    .icon {
       cursor: pointer;
     }
-    .icon:nth-child(2) {
-      margin-left: 15px;
+
+    .refresh {
+      margin-left: 10px;
+    }
+
+    .add {
+      margin-left: 2px;
+    }
+
+    .head-opt:not(.add) .refresh {
+      margin-left: 5px;
     }
   }
+
   .scrollbar {
     width: 100%;
     height: calc(100% - 38px);
@@ -399,37 +498,40 @@ path[fill="#ffdda1"] {
     @media (max-width: 767px) {
       height: calc(100% - 98px);
     }
+
     .empty {
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100%;
     }
+
     .noLoading {
       display: flex;
       justify-content: center;
       align-items: center;
       padding: 10px 0;
-      color: gray;
+      color: var(--secondary-text-color);
     }
   }
+
   .btn {
     width: 100%;
     margin-top: 15px;
   }
 
   .item {
-    background-color: #fff;
+    background-color: var(--el-bg-color);
     border-radius: 8px;
     padding: 12px 10px;
     margin-bottom: 10px;
     margin-left: 10px;
     margin-right: 10px;
     cursor: pointer;
+
     .account {
       font-weight: 600;
       margin-bottom: 20px;
-      color: #333;
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
@@ -455,12 +557,13 @@ path[fill="#ffdda1"] {
       padding: 0;
     }
   }
-  .item:first-child{
-    margin-top: 10px  ;
+
+  .item:first-child {
+    margin-top: 10px;
   }
 
   .item-choose {
-    background: var(--el-color-primary-light-8);
+    background: var(--choose-account-background);
   }
 }
 
@@ -473,7 +576,7 @@ path[fill="#ffdda1"] {
 :deep(.el-input-group__append) {
   padding: 0 !important;
   padding-left: 8px !important;
-  background: #FFFFFF;
+  background: var(--el-bg-color);
 }
 
 :deep(.el-dialog) {
@@ -495,7 +598,7 @@ path[fill="#ffdda1"] {
 
 :deep(.el-pagination .el-select) {
   width: 100px;
-  background: #FFF;
+  background: var(--el-bg-color);
 }
 
 .add-email-turnstile {

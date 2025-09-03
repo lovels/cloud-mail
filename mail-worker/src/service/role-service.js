@@ -6,24 +6,34 @@ import rolePerm from '../entity/role-perm';
 import perm from '../entity/perm';
 import { permConst, roleConst } from '../const/entity-const';
 import userService from './user-service';
+import user from '../entity/user';
+import verifyUtils from '../utils/verify-utils';
+import { t } from '../i18n/i18n.js';
+import emailUtils from '../utils/email-utils';
 
 const roleService = {
 
 	async add(c, params, userId) {
 
-		let { name, permIds } = params;
+		let { name, permIds, banEmail, availDomain } = params;
 
 		if (!name) {
-			throw new BizError('身份名不能为空');
+			throw new BizError(t('emptyRoleName'));
 		}
 
 		let roleRow = await orm(c).select().from(role).where(eq(role.name, name)).get();
 
-		if (roleRow) {
-			throw new BizError('身份名已存在');
+		const notEmailIndex = banEmail.findIndex(item => (!verifyUtils.isEmail(item) && !verifyUtils.isDomain(item)))
+
+		if (notEmailIndex > -1) {
+			throw new BizError(t('notEmail'));
 		}
 
-		roleRow = await orm(c).insert(role).values({...params, userId}).returning().get();
+		banEmail = banEmail.join(',');
+
+		availDomain = availDomain.join(',');
+
+		roleRow = await orm(c).insert(role).values({...params, banEmail, availDomain, userId}).returning().get();
 
 		if (permIds.length === 0) {
 			return;
@@ -44,6 +54,8 @@ const roleService = {
 			.where(eq(perm.type, permConst.type.BUTTON)).all();
 
 		roleList.forEach(role => {
+			role.banEmail = role.banEmail.split(",").filter(item => item !== "");
+			role.availDomain = role.availDomain.split(",").filter(item => item !== "");
 			role.permIds = permList.filter(perm => perm.roleId === role.roleId).map(perm => perm.permId);
 		});
 
@@ -52,15 +64,25 @@ const roleService = {
 
 	async setRole(c, params) {
 
-		let { name, permIds, roleId } = params;
+		let { name, permIds, roleId, banEmail, availDomain } = params;
 
 		if (!name) {
-			throw new BizError('名字不能为空');
+			throw new BizError(t('emptyRoleName'));
 		}
 
 		delete params.isDefault
 
-		await orm(c).update(role).set({...params}).where(eq(role.roleId, roleId)).run();
+		const notEmailIndex = banEmail.findIndex(item => (!verifyUtils.isEmail(item) && !verifyUtils.isDomain(item)))
+
+		if (notEmailIndex > -1) {
+			throw new BizError(t('notEmail'));
+		}
+
+		banEmail = banEmail.join(',')
+
+		availDomain = availDomain.join(',')
+
+		await orm(c).update(role).set({...params, banEmail, availDomain}).where(eq(role.roleId, roleId)).run();
 		await orm(c).delete(rolePerm).where(eq(rolePerm.roleId, roleId)).run();
 
 		if (permIds.length > 0) {
@@ -77,11 +99,11 @@ const roleService = {
 		const roleRow = await orm(c).select().from(role).where(eq(role.roleId, roleId)).get();
 
 		if (!roleRow) {
-			throw new BizError('身份不存在');
+			throw new BizError(t('notExist'));
 		}
 
 		if (roleRow.isDefault) {
-			throw new BizError('默认身份不能删除');
+			throw new BizError(t('delDefRole'));
 		}
 
 		const defRoleRow = await orm(c).select().from(role).where(eq(role.isDefault, roleConst.isDefault.OPEN)).get();
@@ -94,7 +116,7 @@ const roleService = {
 	},
 
 	roleSelectUse(c) {
-		return orm(c).select({ name: role.name, roleId: role.roleId }).from(role).orderBy(asc(role.sort)).all();
+		return orm(c).select({ name: role.name, roleId: role.roleId, isDefault: role.isDefault }).from(role).orderBy(asc(role.sort)).all();
 	},
 
 	async selectDefaultRole(c) {
@@ -104,7 +126,7 @@ const roleService = {
 	async setDefault(c, params) {
 		const roleRow = await orm(c).select().from(role).where(eq(role.roleId, params.roleId)).get();
 		if (!roleRow) {
-			throw new BizError('身份不存在');
+			throw new BizError(t('roleNotExist'));
 		}
 		await orm(c).update(role).set({ isDefault: 0 }).run();
 		await orm(c).update(role).set({ isDefault: 1 }).where(eq(role.roleId, params.roleId)).run();
@@ -126,6 +148,32 @@ const roleService = {
 			.leftJoin(rolePerm, eq(perm.permId, rolePerm.permId))
 			.leftJoin(role, eq(role.roleId, rolePerm.roleId))
 			.where(and(eq(perm.permKey, permKey), eq(role.sendType, sendType))).all();
+	},
+
+	selectByUserId(c, userId) {
+		return orm(c).select(role).from(user).leftJoin(role, eq(role.roleId, user.type)).where(eq(user.userId, userId)).get();
+	},
+
+	hasAvailDomainPerm(availDomain, email) {
+
+		availDomain = availDomain.split(',').filter(item => item !== '');
+
+		if (availDomain.length === 0) {
+			return true
+		}
+
+		const availIndex = availDomain.findIndex(item => {
+			const domain = emailUtils.getDomain(email.toLowerCase());
+			const availDomainItem = item.toLowerCase();
+			console.log(domain,availDomainItem)
+			return domain === availDomainItem
+		})
+
+		return availIndex > -1
+	},
+
+	selectByName(c, roleName) {
+		return orm(c).select().from(role).where(eq(role.name, roleName)).get();
 	}
 };
 

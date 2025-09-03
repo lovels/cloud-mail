@@ -5,13 +5,24 @@ import { desc, count, eq, and, ne, isNotNull } from 'drizzle-orm';
 import { emailConst } from '../const/entity-const';
 import kvConst from '../const/kv-const';
 import dayjs from 'dayjs';
-import timezone from 'dayjs/plugin/timezone'
-import utc from 'dayjs/plugin/utc'
-dayjs.extend(utc)
-dayjs.extend(timezone)
+import { toUtc } from '../utils/date-uitil';
 const analysisService = {
 
-	async echarts(c) {
+	async echarts(c, params) {
+
+
+		const { timeZone } = params;
+
+		let utcDate = toUtc().startOf('day');
+
+		let localDate = utcDate.tz(timeZone);
+
+		utcDate = dayjs(utcDate.format('YYYY-MM-DD HH:mm:ss'))
+
+		localDate = dayjs(localDate.format('YYYY-MM-DD HH:mm:ss'))
+
+		//获取时差
+		const diffHours = localDate.diff(utcDate, 'hour',true);
 
 
 		const [
@@ -27,23 +38,23 @@ const analysisService = {
 			orm(c)
 				.select({ name: email.name, total: count() })
 				.from(email)
-				.where(and(eq(email.type, emailConst.type.RECEIVE), isNotNull(email.name), ne(email.name,'')))
+				.where(and(eq(email.type, emailConst.type.RECEIVE), isNotNull(email.name),ne(email.name,'noreply'), ne(email.name,'')))
 				.groupBy(email.name)
 				.orderBy(desc(count()))
 				.limit(6),
 
 
-			analysisDao.userDayCount(c),
-			analysisDao.receiveDayCount(c),
-			analysisDao.sendDayCount(c),
+			analysisDao.userDayCount(c, diffHours),
+			analysisDao.receiveDayCount(c, diffHours),
+			analysisDao.sendDayCount(c, diffHours),
 
 			c.env.kv.get(kvConst.SEND_DAY_COUNT + dayjs().format('YYYY-MM-DD')),
 		]);
 
 
-		const userDayCount = this.filterEmptyDay(userDayCountRaw);
-		const receiveDayCount = this.filterEmptyDay(receiveDayCountRaw);
-		const sendDayCount = this.filterEmptyDay(sendDayCountRaw);
+		const userDayCount = this.filterEmptyDay(userDayCountRaw, timeZone);
+		const receiveDayCount = this.filterEmptyDay(receiveDayCountRaw, timeZone);
+		const sendDayCount = this.filterEmptyDay(sendDayCountRaw, timeZone);
 
 		const daySendTotal = daySendTotalRaw || 0;
 
@@ -61,8 +72,8 @@ const analysisService = {
 		};
 	},
 
-	filterEmptyDay(data) {
-		const today = dayjs().tz('Asia/Shanghai').subtract(1, 'day');
+	filterEmptyDay(data, timeZone) {
+		const today = toUtc().tz(timeZone).subtract(1, 'day');
 		const previousDays = Array.from({ length: 15 }, (_, i) => {
 			return today.subtract(i, 'day').format('YYYY-MM-DD');
 		}).reverse();

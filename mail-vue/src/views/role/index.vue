@@ -1,62 +1,109 @@
 <template>
   <div class="perm-box">
     <div class="header-actions">
-      <Icon class="icon" icon="ion:add-outline" width="23" height="23"  @click="openAddRole" />
-      <Icon class="icon" icon="ion:reload" width="18" height="18" @click="refresh" />
+      <Icon class="icon" icon="ion:add-outline" width="23" height="23" @click="openAddRole"/>
+      <Icon class="icon" icon="ion:reload" width="18" height="18" @click="refresh"/>
     </div>
-    <div class="loading" v-if="tableLoading">
-      <loading/>
-    </div>
-    <el-scrollbar v-else class="perm-scrollbar">
-      <div>
-        <el-table
-            :data="roles"
-            style="width: 100%;"
-        >
-          <el-table-column  width="10" />
-          <el-table-column label="身份名称" prop="name" :min-width="roleWidth">
-            <template #default="props">
-              <div class="role-name">
-                <span >{{props.row.name}}</span>
-                <span v-if="props.row.isDefault"><el-tag class="def-tag" >默认</el-tag></span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="排序" :width="sortWidth" prop="sort"/>
-          <el-table-column v-if="desShow" label="描述" min-width="200" prop="description" >
-            <template #default="props">
-              <div class="description">
-                <span >{{props.row.description}}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" :width="settingWidth">
-            <template #default="props">
-              <el-dropdown trigger="click">
-                <el-button size="small" type="primary">操作</el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="openRoleSet(props.row)">修改</el-dropdown-item>
-                    <el-dropdown-item @click="setDef(props.row)">默认</el-dropdown-item>
-                    <el-dropdown-item @click="delRole(props.row)">删除</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </template>
-          </el-table-column>
-        </el-table>
+    <el-scrollbar class="perm-scrollbar">
+      <div class="loading" :class="tableLoading ? 'loading-show' : 'loading-hide'"
+           :style="first ? 'background: transparent' : ''">
+        <loading/>
       </div>
+      <el-table
+          :data="roles"
+          style="height: 100%;"
+          :empty-text="''"
+      >
+        <el-table-column width="10"/>
+        <el-table-column :label="$t('role')" prop="name" :min-width="roleWidth">
+          <template #default="props">
+            <div class="role-name">
+              <span>{{ props.row.name }}</span>
+              <span v-if="props.row.isDefault"><el-tag class="def-tag">{{ $t('default') }}</el-tag></span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="$t('order')" :width="sortWidth" prop="sort"/>
+        <el-table-column v-if="desShow" :label="$t('description')" min-width="200" prop="description">
+          <template #default="props">
+            <div class="description">
+              <span>{{ props.row.description }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="$t('tabSetting')" :width="settingWidth">
+          <template #default="props">
+            <el-dropdown trigger="click">
+              <el-button size="small" type="primary">{{ $t('action') }}</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="openRoleSet(props.row)">{{ $t('change') }}</el-dropdown-item>
+                  <el-dropdown-item @click="setDef(props.row)">{{ $t('default') }}</el-dropdown-item>
+                  <el-dropdown-item @click="delRole(props.row)">{{ $t('delete') }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-scrollbar>
-    <el-dialog class="dialog" v-model="roleFormShow" :title="dialogType.title" @closed="resetForm">
+    <el-dialog top="5vh" class="dialog" v-model="roleFormShow" @closed="resetForm">
+      <template #header>
+        <span style="font-size: 18px">{{ dialogType.title }}</span>
+        <el-popover
+            width="340"
+            :title="t('featDesc')"
+            placement="bottom"
+        >
+          <template #reference>
+            <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+          </template>
+          <div style="font-weight: bold;;margin-bottom: 2px;">{{ t('emailInterception') }}</div>
+          <div>{{ t('emailInterceptionDesc') }}</div>
+          <div style="font-weight: bold;;margin-top: 10px;margin-bottom: 2px;">{{ t('availableDomains') }}</div>
+          <div>
+            {{ t('availableDomainsDesc') }}
+          </div>
+        </el-popover>
+      </template>
       <div class="dialog-box">
-        <el-input class="dialog-input" v-model="form.name" type="text" :maxlength="12" placeholder="身份名称" autocomplete="off" />
-        <el-input class="dialog-input" v-model="form.description" :maxlength="30" type="text" placeholder="描述" autocomplete="off" />
+        <el-input class="dialog-input" v-model="form.name" type="text" :maxlength="12" :placeholder="$t('roleName')"
+                  autocomplete="off"/>
+        <el-input class="dialog-input" v-model="form.description" :maxlength="30" type="text"
+                  :placeholder="$t('description')" autocomplete="off"/>
+        <el-input-tag class="dialog-input-tag" tag-type="warning"
+                      :class="form.banEmail.length === 0 ? 'dialog-input' : '' " v-model="form.banEmail"
+                      @add-tag="banEmailAddTag" type="text" :placeholder="$t('emailInterception')" autocomplete="off"/>
+        <el-radio-group class="dialog-radio" v-model="form.banEmailType" v-if="form.banEmail.length > 0">
+          <el-radio :label="$t('removeAll')" :value="0"/>
+          <el-radio :label="$t('removeContent')" :value="1"/>
+        </el-radio-group>
+        <el-select
+            class="dialog-input"
+            v-model="form.availDomain"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            :reserve-keyword="false"
+            tag-type="success"
+            :placeholder="$t('availableDomains')"
+            @change="availDomainChange"
+        >
+          <el-option
+              v-for="item in domainOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+          />
+        </el-select>
         <div class="dialog-input">
-          <el-input-number placeholder="排序" :min="0" :max="9999" v-model.number="form.sort" controls-position="right" autocomplete="off" />
+          <el-input-number :placeholder="$t('order')" :min="0" :max="9999" v-model.number="form.sort"
+                           controls-position="right" autocomplete="off"/>
         </div>
         <el-radio-group v-model="expand" size="small" @change="expandChange" class="perm-expand">
-          <el-radio-button label="展开" :value="true" />
-          <el-radio-button label="收起" :value="false" />
+          <el-radio-button :label="$t('expand')" :value="true"/>
+          <el-radio-button :label="$t('collapse')" :value="false"/>
         </el-radio-group>
         <el-tree
             :expand-on-click-node="false"
@@ -72,24 +119,28 @@
         >
           <template #default="{ node, data }">
             <div>
-              <span>{{node.label}}</span>
+              <span>{{ node.label }}</span>
               <span class="send-num" v-if="data.permKey === 'email:send'" @click.stop>
-                <el-input-number  v-model="form.sendCount" controls-position="right" :min="0" :max="99999" size="small" placeholder="数量" >
+                <el-input-number v-model="form.sendCount" controls-position="right" :min="0" :max="99999" size="small"
+                                 :placeholder="$t('total')">
                 </el-input-number>
-                  <el-select v-model="form.sendType" placeholder="Select" size="small" style="width: 60px;margin-left: 5px;">
-                    <el-option label="总数" value="count" />
-                    <el-option label="每天" value="day" />
+                  <el-select v-model="form.sendType" placeholder="Select" size="small"
+                             style="width: 65px;margin-left: 5px;">
+                    <el-option :label="$t('total')" value="count"/>
+                    <el-option :label="$t('daily')" value="day"/>
+                    <el-option :label="$t('btnBan')" value="ban"/>
                   </el-select>
               </span>
               <span class="send-num" v-if="data.permKey === 'account:add'" @click.stop>
-                <el-input-number  v-model="form.accountCount" controls-position="right" :min="0" :max="99999" size="small" placeholder="数量" >
+                <el-input-number v-model="form.accountCount" controls-position="right" :min="0" :max="99999"
+                                 size="small" :placeholder="$t('total')">
                 </el-input-number>
               </span>
             </div>
           </template>
         </el-tree>
         <el-button class="btn" type="primary" :loading="permLoading" @click="roleFormClick"
-        >保存
+        >{{ $t('save') }}
         </el-button>
       </div>
     </el-dialog>
@@ -102,11 +153,16 @@ import {roleAdd, roleDelete, rolePermTree, roleRoleList, roleSet, roleSetDef} fr
 import loading from '@/components/loading/index.vue';
 import {useRoleStore} from "@/store/role.js";
 import {useUserStore} from "@/store/user.js";
+import {useSettingStore} from "@/store/setting.js";
+import {isEmail, isDomain} from "@/utils/verify-utils.js";
+import {useI18n} from "vue-i18n";
 
 defineOptions({
   name: 'role'
 })
 
+const {domainList} = useSettingStore();
+const {t, locale} = useI18n();
 const userStore = useUserStore();
 const roleStore = useRoleStore();
 const roleFormShow = ref(false)
@@ -119,6 +175,7 @@ const desShow = ref(true)
 const settingWidth = ref(null)
 const sortWidth = ref(null)
 const roleWidth = ref(200)
+const first = ref(true)
 
 const dialogType = reactive({
   title: '',
@@ -128,12 +185,17 @@ const dialogType = reactive({
 const form = reactive({
   name: null,
   description: null,
+  banEmail: [],
+  banEmailType: 0,
   sendType: 'count',
-  sendCount: '',
-  accountCount: '',
+  sendCount: 0,
+  accountCount: 0,
   sort: 0,
   isDefault: 0,
+  availDomain: []
 })
+
+let domainOptions = []
 
 const expand = ref(false)
 
@@ -144,6 +206,36 @@ refresh()
 rolePermTree().then(tree => {
   treeList.push(...tree)
 })
+
+domainOptions = domainList.map(domain => {
+  const cleanDomain = domain.replace(/^@/, '');
+  return {label: cleanDomain, value: cleanDomain};
+});
+
+
+function availDomainChange() {
+  const index = form.availDomain.findIndex(domain => {
+    return !domainOptions.map(option => option.value).includes(domain)
+  })
+  if (index > -1) {
+    form.availDomain.splice(index, 1)
+  }
+}
+
+function banEmailAddTag(val) {
+  const emails = Array.from(new Set(
+      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+  ));
+
+  form.banEmail.splice(form.banEmail.length - 1, 1)
+
+  emails.forEach(email => {
+    if ((isEmail(email) || isDomain(email)) && !form.banEmail.includes(email)) {
+      form.banEmail.push(email)
+    }
+  })
+}
+
 
 function roleFormClick() {
   if (dialogType.type === 'add') {
@@ -156,7 +248,7 @@ function roleFormClick() {
 function setDef(role) {
   roleSetDef(role.roleId).then(() => {
     ElMessage({
-      message: "设置成功",
+      message: t('saveSuccessMsg'),
       type: "success",
       plain: true
     })
@@ -165,14 +257,14 @@ function setDef(role) {
 }
 
 function delRole(role) {
-  ElMessageBox.confirm(`确认删除 ${role.name} 吗?`, {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
+  ElMessageBox.confirm(t('delConfirm', {msg: role.name}), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('confirm'),
     type: 'warning'
   }).then(() => {
     roleDelete(role.roleId).then(() => {
       ElMessage({
-        message: "删除成功",
+        message: t('copySuccessMsg'),
         type: "success",
         plain: true
       })
@@ -202,14 +294,14 @@ function setRole() {
 
   if (!form.name) {
     ElMessage({
-      message: "身份名不能为空",
+      message: t('emptyRoleNameMsg'),
       type: "error",
       plain: true
     })
     return
   }
 
-  const params = {...form,roleId: chooseRole.roleId}
+  const params = {...form, roleId: chooseRole.roleId}
   const checkedId = tree.value.getCheckedKeys()
   const halfId = tree.value.getHalfCheckedKeys()
   params.permIds = [...checkedId, ...halfId]
@@ -217,7 +309,7 @@ function setRole() {
   permLoading.value = true
   roleSet(params).then(() => {
     ElMessage({
-      message: "修改成功",
+      message: t('saveSuccessMsg'),
       type: "success",
       plain: true
     })
@@ -240,14 +332,17 @@ function resetForm() {
   form.description = null
   form.sort = 0
   form.sendType = 'count'
-  form.sendCount = ''
-  form.accountCount = ''
+  form.sendCount = 0
+  form.accountCount = 0
+  form.banEmail = []
+  form.banEmailType = 0
+  form.availDomain = []
   tree.value.setCheckedKeys([])
 }
 
 function openRoleSet(role) {
   chooseRole = role
-  dialogType.title = '修改身份'
+  dialogType.title = t('changeRoleTitle')
   dialogType.type = 'set'
   roleFormShow.value = true
   form.sort = role.sort
@@ -256,6 +351,9 @@ function openRoleSet(role) {
   form.sendType = role.sendType
   form.sendCount = role.sendCount
   form.accountCount = role.accountCount
+  form.banEmail = role.banEmail
+  form.banEmailType = role.banEmailType
+  form.availDomain = role.availDomain
   nextTick(() => {
     tree.value.setCheckedKeys(role.permIds)
   })
@@ -263,7 +361,7 @@ function openRoleSet(role) {
 
 
 function openAddRole() {
-  dialogType.title = '添加身份'
+  dialogType.title = t('addRoleTitle')
   dialogType.type = 'add'
   roleFormShow.value = true
 }
@@ -277,7 +375,7 @@ function addRole() {
   permLoading.value = true
   roleAdd(params).then(() => {
     ElMessage({
-      message: "添加成功",
+      message: t('addSuccessMsg'),
       type: "success",
       plain: true
     })
@@ -301,12 +399,15 @@ function getRoleList() {
     roles.value = list
   }).finally(() => {
     tableLoading.value = false
+    setTimeout(() => {
+      first.value = false
+    }, 200)
   })
 }
 
 function adjustWidth() {
   desShow.value = window.innerWidth > 767
-  settingWidth.value = window.innerWidth < 480 ? 75 : null
+  settingWidth.value = window.innerWidth < 480 ? (locale.value === 'en' ? 85 : 75) : null
   sortWidth.value = window.innerWidth < 480 ? 75 : null
   roleWidth.value = window.innerWidth < 480 ? 180 : 200
 }
@@ -346,9 +447,10 @@ window.onresize = () => {
   padding: 9px 15px;
   display: flex;
   align-items: center;
-  gap: 20px;
-  box-shadow: inset 0 -1px 0 0 rgba(100, 121, 143, 0.12);
+  gap: 18px;
+  box-shadow: var(--header-actions-border);
   font-size: 18px;
+
   .search {
     :deep(.el-input-group) {
       height: 28px;
@@ -362,6 +464,14 @@ window.onresize = () => {
   }
 }
 
+.warning {
+  position: relative;
+  left: 5px;
+  top: 2px;
+  color: gray;
+  cursor: pointer;
+}
+
 :deep(.description) {
   white-space: nowrap;
   overflow: hidden;
@@ -369,10 +479,25 @@ window.onresize = () => {
 }
 
 .loading {
-  height: 100%;
+  height: calc(100% - 41px);
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: absolute;
+  background: var(--loadding-background);
+  z-index: 2;
+}
+
+.loading-show {
+  transition: all 200ms ease 200ms;
+  opacity: 1;
+}
+
+.loading-hide {
+  pointer-events: none;
+  transition: var(--loading-hide-transition);
+  opacity: 0;
 }
 
 .role-name {
@@ -397,26 +522,39 @@ window.onresize = () => {
   .dialog-input {
     margin-bottom: 15px !important;
   }
+
+  .dialog-radio {
+    margin-top: 5px;
+    margin-bottom: 5px;
+  }
+
+  .dialog-input-tag {
+  }
 }
 
-.perm-expand  {
+.perm-expand {
   margin-bottom: 5px;
   --el-border-radius-base: 4px;
   position: relative;
   bottom: 5px;
 }
 
+
 :deep(.el-dialog) {
-  margin-top: 15vh !important;
   margin-bottom: 20px !important;
-  width: 400px !important;
-  @media (max-width: 440px) {
+  width: 460px !important;
+  @media (max-width: 500px) {
     width: calc(100% - 40px) !important;
     margin-right: 20px !important;
     margin-left: 20px !important;
 
   }
 }
+
+:deep(.el-scrollbar__view) {
+  height: 100%;
+}
+
 .btn {
   width: 100%;
   margin-top: 15px;

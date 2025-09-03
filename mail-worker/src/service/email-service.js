@@ -1,7 +1,7 @@
 import orm from '../entity/orm';
 import email from '../entity/email';
 import { attConst, emailConst, isDel, settingConst } from '../const/entity-const';
-import { and, desc, eq, gt, inArray, lt, count, asc, sql, ne, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, lt, count, asc, sql, ne, or, like, lte, gte } from 'drizzle-orm';
 import { star } from '../entity/star';
 import settingService from './setting-service';
 import accountService from './account-service';
@@ -16,6 +16,7 @@ import user from '../entity/user';
 import starService from './star-service';
 import dayjs from 'dayjs';
 import kvConst from '../const/kv-const';
+import { t } from '../i18n/i18n'
 
 const emailService = {
 
@@ -57,9 +58,9 @@ const emailService = {
 			)
 			.where(
 				and(
-					timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId),
-					eq(email.accountId, accountId),
 					eq(email.userId, userId),
+					eq(email.accountId, accountId),
+					timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId),
 					eq(email.type, type),
 					eq(email.isDel, isDel.NORMAL)
 				)
@@ -133,64 +134,78 @@ const emailService = {
 
 		let { attDataList, html } = await attService.toImageUrlHtml(c, content, r2Domain);
 
-		if (attDataList.length > 0 && !r2Domain) {
-			throw new BizError('r2域名未配置不能发送正文图片');
-		}
-
-		if (attDataList.length > 0 && !c.env.r2) {
-			throw new BizError('r2对象存储未配置不能发送正文图片');
-		}
-
-		if (attachments.length > 0 && !r2Domain) {
-			throw new BizError('r2域名未配置不能发送附件');
-		}
-
-		if (attachments.length > 0 && !c.env.r2) {
-			throw new BizError('r2对象存储未配置不能发送附件');
-		}
-
 		if (send === settingConst.send.CLOSE) {
-			throw new BizError('邮箱发送功能已停用', 403);
+			throw new BizError(t('disabledSend'), 403);
 		}
-
-		if (attachments.length > 0 && manyType === 'divide') {
-			throw new BizError('分别发送暂时不支持附件');
-		}
-
 
 		const userRow = await userService.selectById(c, userId);
 		const roleRow = await roleService.selectById(c, userRow.type);
 
+		if (c.env.admin !== userRow.email && roleRow.sendType === 'ban') {
+			throw new BizError(t('bannedSend'), 403);
+		}
+
 		if (c.env.admin !== userRow.email && roleRow.sendCount) {
 
 			if (userRow.sendCount >= roleRow.sendCount) {
-				if (roleRow.sendType === 'day') throw new BizError('已到达每日发送次数限制', 403);
-				if (roleRow.sendType === 'count') throw new BizError('已到达发送次数限制', 403);
+				if (roleRow.sendType === 'day') throw new BizError(t('daySendLimit'), 403);
+				if (roleRow.sendType === 'count') throw new BizError(t('totalSendLimit'), 403);
 			}
 
 			if (userRow.sendCount + receiveEmail.length > roleRow.sendCount) {
-				if (roleRow.sendType === 'day') throw new BizError('剩余每日发送次数不足', 403);
-				if (roleRow.sendType === 'count') throw new BizError('剩余发送次数不足', 403);
+				if (roleRow.sendType === 'day') throw new BizError(t('daySendLack'), 403);
+				if (roleRow.sendType === 'count') throw new BizError(t('totalSendLack'), 403);
 			}
 
+		}
+
+
+		if (attDataList.length > 0 && !r2Domain) {
+			throw new BizError(t('noOsDomainSendPic'));
+		}
+
+		if (attDataList.length > 0 && !c.env.r2) {
+			throw new BizError(t('noOsSendPic'));
+		}
+
+		if (attachments.length > 0 && !r2Domain) {
+			throw new BizError(t('noOsDomainSendAtt'));
+		}
+
+		if (attachments.length > 0 && !c.env.r2) {
+			throw new BizError(t('noOsSendAtt'));
+		}
+
+		if (attachments.length > 0 && manyType === 'divide') {
+			throw new BizError(t('noSeparateSend'));
 		}
 
 
 		const accountRow = await accountService.selectById(c, accountId);
 
-		const domain = emailUtils.getDomain(accountRow.email);
-		const resendToken = resendTokens[domain];
-		if (!resendToken) {
-			throw new BizError('resend密钥未配置');
-		}
-
 		if (!accountRow) {
-			throw new BizError('邮箱不存在');
+			throw new BizError(t('senderAccountNotExist'));
 		}
 
 		if (accountRow.userId !== userId) {
-			throw new BizError('非当前用户所属邮箱');
+			throw new BizError(t('sendEmailNotCurUser'));
 		}
+
+		if (c.env.admin !== userRow.email) {
+
+			if(!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
+				throw new BizError(t('noDomainPermSend'),403)
+			}
+
+		}
+
+		const domain = emailUtils.getDomain(accountRow.email);
+		const resendToken = resendTokens[domain];
+
+		if (!resendToken) {
+			throw new BizError(t('noResendToken'));
+		}
+
 
 		if (!name) {
 			name = emailUtils.getName(accountRow.email);
@@ -205,7 +220,7 @@ const emailService = {
 			emailRow = await this.selectById(c, emailId);
 
 			if (!emailRow) {
-				throw new BizError('邮件不存在无法回复');
+				throw new BizError(t('notExistEmailReply'));
 			}
 
 		}
@@ -265,7 +280,6 @@ const emailService = {
 
 
 		if (error) {
-			console.error(error);
 			throw new BizError(error.message);
 		}
 
@@ -488,7 +502,7 @@ const emailService = {
 
 	async allList(c, params) {
 
-		let { emailId, size, name, subject, accountEmail, sendEmail, userEmail, type, timeSort } = params;
+		let { emailId, size, name, subject, accountEmail, userEmail, type, timeSort } = params;
 
 		size = Number(size);
 
@@ -600,6 +614,52 @@ const emailService = {
 			isDel: isDel.NORMAL,
 			status: status
 		}).where(eq(email.emailId, emailId)).returning().get();
+	},
+
+	async batchDelete(c, params) {
+		let { sendName, sendEmail, toEmail, subject, startTime, endTime, type  } = params
+
+		let right = type === 'left' || type === 'include'
+		let left = type === 'include'
+
+		const conditions = []
+
+		if (sendName) {
+			conditions.push(like(email.name,`${left ? '%' : ''}${sendName}${right ? '%' : ''}`))
+		}
+
+		if (subject) {
+			conditions.push(like(email.subject,`${left ? '%' : ''}${subject}${right ? '%' : ''}`))
+		}
+
+		if (sendEmail) {
+			conditions.push(like(email.sendEmail,`${left ? '%' : ''}${sendEmail}${right ? '%' : ''}`))
+		}
+
+		if (toEmail) {
+			conditions.push(like(email.toEmail,`${left ? '%' : ''}${toEmail}${right ? '%' : ''}`))
+		}
+
+		if (startTime && endTime) {
+			conditions.push(gte(email.createTime,`${startTime}`))
+			conditions.push(lte(email.createTime,`${endTime}`))
+		}
+
+		if (conditions.length === 0) {
+			return;
+		}
+
+		const emailIdsRow = await orm(c).select({emailId: email.emailId}).from(email).where(conditions.length > 1 ? and(...conditions) : conditions[0]).all();
+
+		const emailIds = emailIdsRow.map(row => row.emailId);
+
+		if (emailIds.length === 0){
+			return;
+		}
+
+		await attService.deleteByEmailIds(c, emailIds);
+
+		await orm(c).delete(email).where(conditions.length > 1 ? and(...conditions) : conditions[0]).run();
 	}
 };
 

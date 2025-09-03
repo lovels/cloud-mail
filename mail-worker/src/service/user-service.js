@@ -2,19 +2,20 @@ import BizError from '../error/biz-error';
 import accountService from './account-service';
 import orm from '../entity/orm';
 import user from '../entity/user';
-import { and, asc, count, desc, eq, inArray, like, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { emailConst, isDel, roleConst, userConst } from '../const/entity-const';
 import kvConst from '../const/kv-const';
 import KvConst from '../const/kv-const';
 import cryptoUtils from '../utils/crypto-utils';
 import emailService from './email-service';
-import { UAParser } from 'ua-parser-js';
 import dayjs from 'dayjs';
 import permService from './perm-service';
 import roleService from './role-service';
 import emailUtils from '../utils/email-utils';
 import saltHashUtils from '../utils/crypto-utils';
 import constant from '../const/constant';
+import { t } from '../i18n/i18n'
+import reqUtils from '../utils/req-utils';
 
 const userService = {
 
@@ -50,7 +51,7 @@ const userService = {
 		const { password } = params;
 
 		if (password < 6) {
-			throw new BizError('密码不能小于6位');
+			throw new BizError(t('pwdMinLengthLimit'));
 		}
 		const { salt, hash } = await cryptoUtils.hashPassword(password);
 		await orm(c).update(user).set({ password: hash, salt: salt }).where(eq(user.userId, userId)).run();
@@ -70,7 +71,7 @@ const userService = {
 	},
 
 	selectByEmailIncludeDel(c, email) {
-		return orm(c).select().from(user).where(eq(user.email, email)).get();
+		return orm(c).select().from(user).where(sql`${user.email} COLLATE NOCASE = ${email}`).get();
 	},
 
 	selectById(c, userId) {
@@ -215,49 +216,22 @@ const userService = {
 
 	async updateUserInfo(c, userId, recordCreateIp = false) {
 
-		const ua = c.req.header('user-agent') || '';
-		console.log(ua);
-		const parser = new UAParser(ua);
-		const { browser, device, os } = parser.getResult();
 
-		let browserInfo = null;
-		let osInfo = null;
 
-		if (browser.name) {
-			browserInfo = browser.name + ' ' + browser.version;
-		}
+		const activeIp = reqUtils.getIp(c);
 
-		if (os.name) {
-			osInfo = os.name + os.version;
-		}
-
-		let deviceInfo = 'Desktop';
-
-		const hasVendor = !!device?.vendor;
-		const hasModel = !!device?.model;
-
-		if (hasVendor || hasModel) {
-			const vendor = device.vendor || '';
-			const model = device.model || '';
-			const type = device.type || '';
-
-			const namePart = [vendor, model].filter(Boolean).join(' ');
-			const typePart = type ? ` (${type})` : '';
-			deviceInfo = (namePart + typePart).trim();
-		}
-
-		const userIp = c.req.header('cf-connecting-ip') || '';
+		const {os, browser, device} = reqUtils.getUserAgent(c);
 
 		const params = {
-			os: osInfo,
-			browser: browserInfo,
-			device: deviceInfo,
-			activeIp: userIp,
+			os,
+			browser,
+			device,
+			activeIp,
 			activeTime: dayjs().format('YYYY-MM-DD HH:mm:ss')
 		};
 
 		if (recordCreateIp) {
-			params.createIp = userIp;
+			params.createIp = activeIp;
 		}
 
 		await orm(c)
@@ -295,7 +269,7 @@ const userService = {
 		const roleRow = await roleService.selectById(c, type);
 
 		if (!roleRow) {
-			throw new BizError('身份不存在');
+			throw new BizError(t('roleNotExist'));
 		}
 
 		await orm(c)
@@ -327,32 +301,34 @@ const userService = {
 		const { email, type, password } = params;
 
 		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
-			throw new BizError('非法邮箱域名');
+			throw new BizError(t('notEmailDomain'));
 		}
 
 		if (password.length < 6) {
-			throw new BizError('密码必须大于6位');
+			throw new BizError(t('pwdMinLengthLimit'));
 		}
 
 		const accountRow = await accountService.selectByEmailIncludeDel(c, email);
 
 		if (accountRow && accountRow.isDel === isDel.DELETE) {
-			throw new BizError('该邮箱已被注销');
+			throw new BizError(t('isDelUser'));
 		}
 
 		if (accountRow) {
-			throw new BizError('该邮箱已被注册');
+			throw new BizError(t('isRegAccount'));
 		}
 
 		const role = roleService.selectById(c, type);
 
 		if (!role) {
-			throw new BizError('权限身份不存在');
+			throw new BizError(t('roleNotExist'));
 		}
 
 		const { salt, hash } = await saltHashUtils.hashPassword(password);
 
 		const userId = await userService.insert(c, { email, password: hash, salt, type });
+
+		await userService.updateUserInfo(c, userId, true);
 
 		await accountService.insert(c, { userId: userId, email, type, name: emailUtils.getName(email) });
 	},
@@ -382,6 +358,15 @@ const userService = {
 			await accountService.restoreByUserId(c, userId);
 		}
 
+	},
+
+	listByRegKeyId(c, regKeyId) {
+		return orm(c)
+			.select({email: user.email,createTime: user.createTime})
+			.from(user)
+			.where(eq(user.regKeyId, regKeyId))
+			.orderBy(desc(user.userId))
+			.all();
 	}
 };
 

@@ -9,80 +9,96 @@
     </div>
     <div v-else :style="background"></div>
     <div class="form-wrapper">
-        <div class="container">
-          <span class="form-title">{{settingStore.settings.title}}</span>
-          <span class="form-desc" v-if="show === 'login'">请输入账号信息以开始使用邮箱系统</span>
-          <span class="form-desc" v-else>请输入账号密码以开始注册邮箱系统</span>
-          <div v-if="show === 'login'">
-            <el-input class="email-input" v-model="form.email" type="text" placeholder="邮箱" autocomplete="off">
-              <template #append>
-                <div @click.stop="openSelect">
-                  <el-select
-                      ref="mySelect"
-                      v-model="suffix"
-                      placeholder="请选择"
-                      class="select"
-                  >
-                    <el-option
-                        v-for="item in domainList"
-                        :key="item"
-                        :label="item"
-                        :value="item"
-                    />
-                  </el-select>
-                  <div style="color: #333">
-                    <span>{{ suffix }}</span>
-                    <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-                  </div>
+      <div class="container">
+        <span class="form-title">{{ settingStore.settings.title }}</span>
+        <span class="form-desc" v-if="show === 'login'">{{ $t('loginTitle') }}</span>
+        <span class="form-desc" v-else>{{ $t('regTitle') }}</span>
+        <div v-show="show === 'login'">
+          <el-input :class="settingStore.settings.loginDomain === 0 ? 'email-input' : ''" v-model="form.email"
+                    type="text" :placeholder="$t('emailAccount')" autocomplete="off">
+            <template #append v-if="settingStore.settings.loginDomain === 0">
+              <div @click.stop="openSelect">
+                <el-select
+                    v-if="show === 'login'"
+                    ref="mySelect"
+                    v-model="suffix"
+                    :placeholder="$t('select')"
+                    class="select"
+                >
+                  <el-option
+                      v-for="item in domainList"
+                      :key="item"
+                      :label="item"
+                      :value="item"
+                  />
+                </el-select>
+                <div style="color: var(--el-text-color-primary)">
+                  <span>{{ suffix }}</span>
+                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
                 </div>
-              </template>
-            </el-input>
-            <el-input v-model="form.password" placeholder="密码" type="password" autocomplete="off">
-            </el-input>
-            <el-button class="btn" type="primary" @click="submit" :loading="loginLoading"
-            >登录
-            </el-button>
-          </div>
-          <div v-else>
-            <el-input class="email-input" v-model="registerForm.email" type="text" placeholder="邮箱" autocomplete="off">
-              <template #append>
-                <div @click.stop="openSelect">
-                  <el-select
-                      ref="mySelect"
-                      v-model="suffix"
-                      placeholder="请选择"
-                      class="select"
-                  >
-                    <el-option
-                        v-for="item in domainList"
-                        :key="item"
-                        :label="item"
-                        :value="item"
-                    />
-                  </el-select>
-                  <div style="color: #333">
-                    <span>{{ suffix }}</span>
-                    <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-                  </div>
-                </div>
-              </template>
-            </el-input>
-            <el-input v-model="registerForm.password" placeholder="密码" type="password" autocomplete="off" />
-            <el-input v-model="registerForm.confirmPassword" placeholder="确认密码" type="password" autocomplete="off" />
-            <div v-show="verifyShow"
-                class="register-turnstile"
-                :data-sitekey="settingStore.settings.siteKey"
-                data-callback="onTurnstileSuccess"
-            ></div>
-            <el-button class="btn" type="primary" @click="submitRegister" :loading="registerLoading"
-            >注册
-            </el-button>
-          </div>
-          <template v-if="settingStore.settings.register === 0">
-            <div class="switch" @click="show = 'register'" v-if="show === 'login'">还没有账号? <span>创建账号</span></div>
-            <div class="switch" @click="show = 'login'" v-else>已有账号? <span>去登录</span></div>
-          </template>
+              </div>
+            </template>
+          </el-input>
+          <el-input v-model="form.password" :placeholder="$t('password')" type="password" autocomplete="off">
+          </el-input>
+          <el-button class="btn" type="primary" @click="submit" :loading="loginLoading"
+          >{{ $t('loginBtn') }}
+          </el-button>
         </div>
+        <div v-show="show !== 'login'">
+          <el-input class="email-input" v-model="registerForm.email" type="text" :placeholder="$t('emailAccount')"
+                    autocomplete="off">
+            <template #append>
+              <div @click.stop="openSelect">
+                <el-select
+                    v-if="show !== 'login'"
+                    ref="mySelect"
+                    v-model="suffix"
+                    :placeholder="$t('select')"
+                    class="select"
+                >
+                  <el-option
+                      v-for="item in domainList"
+                      :key="item"
+                      :label="item"
+                      :value="item"
+                  />
+                </el-select>
+                <div>
+                  <span>{{ suffix }}</span>
+                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
+                </div>
+              </div>
+            </template>
+          </el-input>
+          <el-input v-model="registerForm.password" :placeholder="$t('password')" type="password" autocomplete="off"/>
+          <el-input v-model="registerForm.confirmPassword" :placeholder="$t('confirmPwd')" type="password"
+                    autocomplete="off"/>
+          <el-input v-if="settingStore.settings.regKey === 0" v-model="registerForm.code" :placeholder="$t('regKey')"
+                    type="text" autocomplete="off"/>
+          <el-input v-if="settingStore.settings.regKey === 2" v-model="registerForm.code"
+                    :placeholder="$t('regKeyOptional')" type="text" autocomplete="off"/>
+          <div v-show="verifyShow"
+               class="register-turnstile"
+               :data-sitekey="settingStore.settings.siteKey"
+               data-callback="onTurnstileSuccess"
+               data-error-callback="onTurnstileError"
+               data-after-interactive-callback="loadAfter"
+               data-before-interactive-callback="loadBefore"
+          >
+            <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed') }}</span>
+          </div>
+          <el-button class="btn" type="primary" @click="submitRegister" :loading="registerLoading"
+          >{{ $t('regBtn') }}
+          </el-button>
+        </div>
+        <template v-if="settingStore.settings.register === 0">
+          <div class="switch" @click="show = 'register'" v-if="show === 'login'">{{ $t('noAccount') }}
+            <span>{{ $t('regSwitch') }}</span></div>
+          <div class="switch" @click="show = 'login'" v-else>{{ $t('hasAccount') }} <span>{{ $t('loginSwitch') }}</span>
+          </div>
+        </template>
+      </div>
     </div>
   </div>
 </template>
@@ -96,13 +112,17 @@ import {isEmail} from "@/utils/verify-utils.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useAccountStore} from "@/store/account.js";
 import {useUserStore} from "@/store/user.js";
+import {useUiStore} from "@/store/ui.js";
 import {Icon} from "@iconify/vue";
 import {cvtR2Url} from "@/utils/convert.js";
 import {loginUserInfo} from "@/request/my.js";
-import {permsToRouter} from "@/utils/perm.js";
+import {permsToRouter} from "@/perm/perm.js";
+import {useI18n} from "vue-i18n";
 
+const {t} = useI18n();
 const accountStore = useAccountStore();
 const userStore = useUserStore();
+const uiStore = useUiStore();
 const settingStore = useSettingStore();
 const loginLoading = ref(false)
 const show = ref('login')
@@ -116,7 +136,8 @@ const suffix = ref('')
 const registerForm = reactive({
   email: '',
   password: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  code: null
 })
 const domainList = settingStore.domainList;
 const registerLoading = ref(false)
@@ -124,18 +145,41 @@ suffix.value = domainList[0]
 const verifyShow = ref(false)
 let verifyToken = ''
 let turnstileId = null
-
+let botJsError = ref(false)
+let verifyErrorCount = 0
 
 window.onTurnstileSuccess = (token) => {
   verifyToken = token;
-  setTimeout(() => {
-    verifyShow.value = false
-  }, 2000)
 };
 
+window.onTurnstileError = (e) => {
+  if (verifyErrorCount >= 4) {
+    return
+  }
+  verifyErrorCount++
+  console.warn('人机验加载失败', e)
+  setTimeout(() => {
+    nextTick(() => {
+      if (!turnstileId) {
+        turnstileId = window.turnstile.render('.register-turnstile')
+      } else {
+        window.turnstile.reset(turnstileId);
+      }
+    })
+  }, 1500)
+};
+
+window.loadAfter = (e) => {
+  console.log('loadAfter')
+}
+
+window.loadBefore = (e) => {
+  console.log('loadBefore')
+}
 
 const loginOpacity = computed(() => {
-  return `rgba(255, 255, 255, ${settingStore.settings.loginOpacity})`
+  const opacity = settingStore.settings.loginOpacity
+  return uiStore.dark ? `rgba(0, 0, 0, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
 })
 
 const background = computed(() => {
@@ -153,21 +197,22 @@ const openSelect = () => {
   mySelect.value.toggleMenu()
 }
 
-
 const submit = () => {
 
   if (!form.email) {
     ElMessage({
-      message: '邮箱不能为空',
+      message: t('emptyEmailMsg'),
       type: 'error',
       plain: true,
     })
     return
   }
 
-  if (!isEmail(form.email + suffix.value)) {
+  let email = form.email + (settingStore.settings.loginDomain === 0 ? suffix.value : '');
+
+  if (!isEmail(email)) {
     ElMessage({
-      message: '输入的邮箱不合法',
+      message: t('notEmailMsg'),
       type: 'error',
       plain: true,
     })
@@ -176,7 +221,7 @@ const submit = () => {
 
   if (!form.password) {
     ElMessage({
-      message: '密码不能为空',
+      message: t('emptyPwdMsg'),
       type: 'error',
       plain: true,
     })
@@ -184,7 +229,7 @@ const submit = () => {
   }
 
   loginLoading.value = true
-  login(form.email + suffix.value, form.password).then(async data => {
+  login(email, form.password).then(async data => {
     localStorage.setItem('token', data.token)
     const user = await loginUserInfo();
     accountStore.currentAccountId = user.accountId;
@@ -194,6 +239,7 @@ const submit = () => {
       router.addRoute('layout', routerData);
     });
     await router.replace({name: 'layout'})
+    uiStore.showNotice()
   }).finally(() => {
     loginLoading.value = false
   })
@@ -204,7 +250,7 @@ function submitRegister() {
 
   if (!registerForm.email) {
     ElMessage({
-      message: '邮箱不能为空',
+      message: t('emptyEmailMsg'),
       type: 'error',
       plain: true,
     })
@@ -213,7 +259,7 @@ function submitRegister() {
 
   if (!isEmail(registerForm.email + suffix.value)) {
     ElMessage({
-      message: '输入的邮箱不合法',
+      message: t('notEmailMsg'),
       type: 'error',
       plain: true,
     })
@@ -222,7 +268,7 @@ function submitRegister() {
 
   if (!registerForm.password) {
     ElMessage({
-      message: '密码不能为空',
+      message: t('emptyPwdMsg'),
       type: 'error',
       plain: true,
     })
@@ -231,7 +277,7 @@ function submitRegister() {
 
   if (registerForm.password.length < 6) {
     ElMessage({
-      message: '密码最少六位',
+      message: t('pwdLengthMsg'),
       type: 'error',
       plain: true,
     })
@@ -241,48 +287,94 @@ function submitRegister() {
   if (registerForm.password !== registerForm.confirmPassword) {
 
     ElMessage({
-      message: '两次密码输入不一致',
+      message: t('confirmPwdFailMsg'),
       type: 'error',
       plain: true,
     })
     return
   }
 
-  if (!verifyToken && settingStore.settings.registerVerify === 0) {
-    verifyShow.value = true
-    if (!turnstileId) {
-      nextTick(() => {
-        turnstileId = window.turnstile.render('.register-turnstile')
+  if (settingStore.settings.regKey === 0) {
+
+    if (!registerForm.code) {
+
+      ElMessage({
+        message: t('emptyRegKeyMsg'),
+        type: 'error',
+        plain: true,
       })
-    } else {
+      return
+    }
+
+  }
+
+  if (!verifyToken && (settingStore.settings.registerVerify === 0 || (settingStore.settings.registerVerify === 2 && settingStore.settings.regVerifyOpen))) {
+    if (!verifyShow.value) {
+      verifyShow.value = true
       nextTick(() => {
-        window.turnstile.reset(turnstileId);
+        if (!turnstileId) {
+          try {
+            turnstileId = window.turnstile.render('.register-turnstile')
+          } catch (e) {
+            botJsError.value = true
+            console.log('人机验证js加载失败')
+          }
+        } else {
+          window.turnstile.reset('.register-turnstile')
+        }
+      })
+    } else if (!botJsError.value) {
+      ElMessage({
+        message: t('botVerifyMsg'),
+        type: "error",
+        plain: true
       })
     }
     return;
   }
 
   registerLoading.value = true
-  register({email: registerForm.email + suffix.value, password: registerForm.password, token: verifyToken}).then(() => {
+
+  const form = {
+    email: registerForm.email + suffix.value,
+    password: registerForm.password,
+    token: verifyToken,
+    code: registerForm.code
+  }
+
+  register(form).then(({regVerifyOpen}) => {
     show.value = 'login'
     registerForm.email = ''
     registerForm.password = ''
     registerForm.confirmPassword = ''
+    registerForm.code = ''
     registerLoading.value = false
     turnstileId = null
     verifyToken = ''
+    settingStore.settings.regVerifyOpen = regVerifyOpen
+    verifyShow.value = false
     ElMessage({
-      message: '注册成功',
+      message: t('regSuccessMsg'),
       type: 'success',
       plain: true,
     })
   }).catch(res => {
+
+    registerLoading.value = false
+
     if (res.code === 400) {
       verifyToken = ''
-      window.turnstile.reset(turnstileId)
+      settingStore.settings.regVerifyOpen = true
+      if (turnstileId) {
+        window.turnstile.reset(turnstileId)
+      } else {
+        nextTick(() => {
+          turnstileId = window.turnstile.render('.register-turnstile')
+        })
+      }
       verifyShow.value = true
+
     }
-    registerLoading.value = false
   });
 }
 
@@ -325,7 +417,7 @@ function submitRegister() {
   justify-content: center;
   width: 450px;
   height: 100%;
-  border: 1px solid #e4e7ed;
+  border-left: 1px solid var(--login-border);
   box-shadow: var(--el-box-shadow-light);
   @media (max-width: 1024px) {
     padding: 20px 18px;
@@ -333,6 +425,7 @@ function submitRegister() {
     margin-left: 18px;
   }
   @media (max-width: 767px) {
+    border: 1px solid var(--login-border);
     padding: 20px 18px;
     border-radius: 6px;
     height: fit-content;
@@ -340,6 +433,7 @@ function submitRegister() {
     margin-right: 18px;
     margin-left: 18px;
   }
+
   .btn {
     height: 36px;
     width: 100%;
@@ -349,29 +443,32 @@ function submitRegister() {
   .form-desc {
     margin-top: 5px;
     margin-bottom: 18px;
-    color: #71717a;
+    color: var(--form-desc-color);
   }
 
   .form-title {
-    font-weight: bold;
+    font-weight: bold;;
     font-size: 22px !important;
   }
 
   .switch {
     margin-top: 20px;
     text-align: center;
+
     span {
-      color: #006be6;
+      color: var(--login-switch-color);
       cursor: pointer;
     }
   }
 
   :deep(.el-input__wrapper) {
     border-radius: 6px;
+    background: var(--el-bg-color);
   }
 
-  .email-input :deep(.el-input__wrapper){
+  .email-input :deep(.el-input__wrapper) {
     border-radius: 6px 0 0 6px;
+    background: var(--el-bg-color);
   }
 
   .el-input {
@@ -397,7 +494,7 @@ function submitRegister() {
   padding: 0 !important;
   padding-left: 8px !important;
   padding-right: 4px !important;
-  background: #FFFFFF;
+  background: var(--el-bg-color);
   border-radius: 0 8px 8px 0;
 }
 
@@ -423,10 +520,8 @@ function submitRegister() {
 }
 
 
-
 #login-box {
   background: linear-gradient(to bottom, #2980b9, #6dd5fa, #fff);
-  color: #333;
   font: 100% Arial, sans-serif;
   height: 100%;
   margin: 0;

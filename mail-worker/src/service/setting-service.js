@@ -1,7 +1,7 @@
 import KvConst from '../const/kv-const';
 import setting from '../entity/setting';
 import orm from '../entity/orm';
-import { settingConst } from '../const/entity-const';
+import { verifyRecordType } from '../const/entity-const';
 import fileUtils from '../utils/file-utils';
 import r2Service from './r2-service';
 import emailService from './email-service';
@@ -9,6 +9,8 @@ import accountService from './account-service';
 import userService from './user-service';
 import constant from '../const/constant';
 import BizError from '../error/biz-error';
+import { t } from '../i18n/i18n'
+import verifyRecordService from './verify-record-service';
 
 const settingService = {
 
@@ -19,22 +21,54 @@ const settingService = {
 	},
 
 	async query(c) {
+
 		const setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
 		let domainList = c.env.domain;
+
 		if (typeof domainList === 'string') {
-			throw new BizError('环境变量domain必须是JSON类型');
+			try {
+				domainList = JSON.parse(domainList)
+			} catch (error) {
+				throw new BizError(t('notJsonDomain'));
+			}
 		}
+
+		if (!c.env.domain) {
+			throw new BizError(t('noDomainVariable'));
+		}
+
 		domainList = domainList.map(item => '@' + item);
 		setting.domainList = domainList;
 		return setting;
 	},
 
 	async get(c) {
-		const settingRow = await this.query(c);
+
+		const [settingRow, recordList] = await Promise.all([
+			await this.query(c),
+			verifyRecordService.selectListByIP(c)
+		]);
+
 		settingRow.secretKey = settingRow.secretKey ? `${settingRow.secretKey.slice(0, 12)}******` : null;
 		Object.keys(settingRow.resendTokens).forEach(key => {
 			settingRow.resendTokens[key] = `${settingRow.resendTokens[key].slice(0, 12)}******`;
 		});
+
+		let regVerifyOpen = false
+		let addVerifyOpen = false
+
+		recordList.forEach(row => {
+			if (row.type === verifyRecordType.REG) {
+				regVerifyOpen = row.count >= settingRow.regVerifyCount
+			}
+			if (row.type === verifyRecordType.ADD) {
+				addVerifyOpen = row.count >= settingRow.addVerifyCount
+			}
+		})
+
+		settingRow.regVerifyOpen = regVerifyOpen
+		settingRow.addVerifyOpen = addVerifyOpen
+
 		return settingRow;
 	},
 
@@ -49,59 +83,45 @@ const settingService = {
 		await this.refresh(c);
 	},
 
-	async isRegister(c) {
-		const { register } = await this.query(c);
-		return register === settingConst.register.OPEN;
-	},
-
-	async isReceive(c) {
-		const { receive } = await this.query(c);
-		return receive === settingConst.receive.OPEN;
-	},
-
-	async isAddEmail(c) {
-		const { addEmail, manyEmail } = await this.query(c);
-		return addEmail === settingConst.addEmail.OPEN && manyEmail === settingConst.manyEmail.OPEN;
-	},
-
-	async isRegisterVerify(c) {
-		const { registerVerify } = await this.query(c);
-		return registerVerify === settingConst.registerVerify.OPEN;
-	},
-
-	async isAddEmailVerify(c) {
-		const { addEmailVerify } = await this.query(c);
-		return addEmailVerify === settingConst.addEmailVerify.OPEN;
-	},
-
 	async setBackground(c, params) {
 
 		const settingRow = await this.query(c);
 
+		let { background } = params
 
-		if (!c.env.r2) {
-			throw new BizError('r2对象存储未配置不能上传背景');
+		if (background && !background.startsWith('http')) {
+
+			if (!c.env.r2) {
+				throw new BizError(t('noOsUpBack'));
+			}
+
+			if (!settingRow.r2Domain) {
+				throw new BizError(t('noOsDomainUpBack'));
+			}
+
+			const file = fileUtils.base64ToFile(background)
+
+			const arrayBuffer = await file.arrayBuffer();
+			background = constant.BACKGROUND_PREFIX + await fileUtils.getBuffHash(arrayBuffer) + fileUtils.getExtFileName(file.name);
+
+
+			await r2Service.putObj(c, background, arrayBuffer, {
+				contentType: file.type
+			});
+
 		}
-
-		if (!settingRow.r2Domain) {
-			throw new BizError('r2域名未配置不上传背景');
-		}
-
-		const { background } = params;
-		const file = fileUtils.base64ToFile(background);
-		const arrayBuffer = await file.arrayBuffer();
-		const key = constant.BACKGROUND_PREFIX + await fileUtils.getBuffHash(arrayBuffer) + fileUtils.getExtFileName(file.name);
-		await r2Service.putObj(c, key, file, {
-			contentType: file.type
-		});
 
 		if (settingRow.background) {
-			await r2Service.delete(c, settingRow.background);
+			try {
+				await r2Service.delete(c, settingRow.background);
+			} catch (e) {
+				console.error(e)
+			}
 		}
 
-		await orm(c).update(setting).set({ background: key }).run();
+		await orm(c).update(setting).set({ background }).run();
 		await this.refresh(c);
-		return key;
+		return background;
 	},
 
 	async physicsDeleteAll(c) {
@@ -111,7 +131,9 @@ const settingService = {
 	},
 
 	async websiteConfig(c) {
-		const settingRow = await this.get(c);
+
+		const settingRow = await this.get(c)
+
 		return {
 			register: settingRow.register,
 			title: settingRow.title,
@@ -125,7 +147,19 @@ const settingService = {
 			siteKey: settingRow.siteKey,
 			background: settingRow.background,
 			loginOpacity: settingRow.loginOpacity,
-			domainList:settingRow.domainList
+			domainList: settingRow.domainList,
+			regKey: settingRow.regKey,
+			regVerifyOpen: settingRow.regVerifyOpen,
+			addVerifyOpen: settingRow.addVerifyOpen,
+			noticeTitle: settingRow.noticeTitle,
+			noticeContent: settingRow.noticeContent,
+			noticeType: settingRow.noticeType,
+			noticeDuration: settingRow.noticeDuration,
+			noticePosition: settingRow.noticePosition,
+			noticeWidth: settingRow.noticeWidth,
+			noticeOffset: settingRow.noticeOffset,
+			notice: settingRow.notice,
+			loginDomain: settingRow.loginDomain
 		};
 	}
 };

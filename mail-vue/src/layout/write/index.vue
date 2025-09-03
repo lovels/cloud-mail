@@ -1,31 +1,33 @@
 <template>
-  <div class="send" v-show="show" @click="close">
+  <div class="send" v-show="show">
     <div class="write-box" @click.stop>
       <div class="title">
         <div class="title-left">
           <span class="title-text">
-            <Icon icon="hugeicons:quill-write-01" width="28" height="28" />
+            <Icon icon="hugeicons:quill-write-01" width="28" height="28"/>
           </span>
-          <span class="sender">发件人:</span>
-          <span class="sender-name">{{form.name}}</span>
-          <span class="send-email"><{{form.sendEmail}}></span>
+          <span class="sender">{{ $t('sender') }}:</span>
+          <span class="sender-name">{{ form.name }}</span>
+          <span class="send-email"><{{ form.sendEmail }}></span>
         </div>
         <div @click="close" style="cursor: pointer;">
           <Icon icon="material-symbols-light:close-rounded" width="22" height="22"/>
         </div>
       </div>
       <div class="container">
-        <el-input-tag @add-tag="addTagChange" tag-type="primary" size="default" v-model="form.receiveEmail" placeholder="多邮个箱用, 分开 example1.com,example2.com" >
+        <el-input-tag @add-tag="addTagChange" tag-type="primary" size="default" v-model="form.receiveEmail"
+                      :placeholder="$t('ruleEmailsInputDesc')">
           <template #prefix>
-            <div class="item-title">收件人 </div>
+            <div class="item-title">{{ $t('recipient') }}</div>
           </template>
           <template #suffix>
-            <span class="distribute" :class="form.manyType ? 'checked' : ''" @click.stop="checkDistribute" >分别发送</span>
+            <span class="distribute" :class="form.manyType ? 'checked' : ''"
+                  @click.stop="checkDistribute">{{ $t('sendSeparately') }}</span>
           </template>
         </el-input-tag>
-        <el-input v-model="form.subject" placeholder="请输入邮件主题">
+        <el-input v-model="form.subject" :placeholder="$t('subjectInputDesc')">
           <template #prefix>
-            <div class="item-title">主题 </div>
+            <div class="item-title">{{ $t('subject') }}</div>
           </template>
         </el-input>
         <tinyEditor :def-value="defValue" ref="editor" @change="change"/>
@@ -46,8 +48,8 @@
             </div>
           </div>
           <div>
-            <el-button type="primary" @click="sendEmail" v-if="form.sendType === 'reply'">回复</el-button>
-            <el-button type="primary" @click="sendEmail" v-else >发送</el-button>
+            <el-button type="primary" @click="sendEmail" v-if="form.sendType === 'reply'">{{ $t('reply') }}</el-button>
+            <el-button type="primary" @click="sendEmail" v-else>{{ $t('send') }}</el-button>
           </div>
         </div>
       </div>
@@ -56,7 +58,7 @@
 </template>
 <script setup>
 import tinyEditor from '@/components/tiny-editor/index.vue'
-import {h, onMounted, onUnmounted, reactive, ref} from "vue";
+import {h, nextTick, onMounted, onUnmounted, reactive, ref, toRaw} from "vue";
 import {Icon} from "@iconify/vue";
 import {useUserStore} from "@/store/user.js";
 import {emailSend} from "@/request/email.js";
@@ -68,12 +70,19 @@ import {getIconByName} from "@/utils/icon-utils.js";
 import sendPercent from "@/components/send-percent/index.vue"
 import {formatDetailDate} from "@/utils/day.js";
 import {useSettingStore} from "@/store/setting.js";
+import {userDraftStore} from "@/store/draft.js";
+import db from "@/db/db.js";
+import dayjs from "dayjs";
+import {useI18n} from "vue-i18n";
 
 defineExpose({
   open,
-  openReply
+  openReply,
+  openDraft
 })
 
+const {t} = useI18n()
+const draftStore = userDraftStore()
 const settingStore = useSettingStore()
 const emailStore = useEmailStore();
 const accountStore = useAccountStore()
@@ -84,6 +93,12 @@ const percent = ref(0)
 let percentMessage = null
 let sending = false
 const defValue = ref('')
+const backReply = reactive({
+  receiveEmail: [],
+  subject: '',
+  content: '',
+  sendType: ''
+})
 const form = reactive({
   sendEmail: '',
   receiveEmail: [],
@@ -95,7 +110,8 @@ const form = reactive({
   sendType: '',
   text: '',
   emailId: 0,
-  attachments: []
+  attachments: [],
+  draftId: null,
 })
 
 function addTagChange(val) {
@@ -110,9 +126,7 @@ function addTagChange(val) {
     if (isEmail(email) && !form.receiveEmail.includes(email)) {
       form.receiveEmail.push(email)
     }
-
   })
-
 
 }
 
@@ -121,9 +135,9 @@ function checkDistribute() {
 }
 
 function clearContent() {
-  ElMessageBox.confirm('确定要清空邮件吗?', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
+  ElMessageBox.confirm(t('clearContentConfirm'), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
     type: 'warning'
   }).then(() => {
     resetForm()
@@ -149,13 +163,12 @@ function chooseFile() {
     const TotalSize = form.attachments.reduce((acc, item) => acc + item.size, 0);
     if ((TotalSize + size) > 29360128) {
       ElMessage({
-        message: '附件文件大小限制28mb',
+        message: t('attLimitMsg'),
         type: 'error',
         plain: true,
       })
       return
     }
-
     const content = await fileToBase64(file)
     form.attachments.push({content, filename, size, contentType})
   }
@@ -165,7 +178,7 @@ async function sendEmail() {
 
   if (form.receiveEmail.length === 0) {
     ElMessage({
-      message: '收件人邮箱地址不能为空',
+      message: t('emptyRecipientMsg'),
       type: 'error',
       plain: true,
     })
@@ -174,7 +187,7 @@ async function sendEmail() {
 
   if (!form.subject) {
     ElMessage({
-      message: '主题不能为空',
+      message: t('emptySubjectMsg'),
       type: 'error',
       plain: true,
     })
@@ -183,7 +196,7 @@ async function sendEmail() {
 
   if (!form.content) {
     ElMessage({
-      message: '正文不能为空',
+      message: t('emptyContentMsg'),
       type: 'error',
       plain: true,
     })
@@ -192,7 +205,7 @@ async function sendEmail() {
 
   if (form.manyType === 'divide' && form.attachments.length > 0) {
     ElMessage({
-      message: '分别发送暂时不支持附件',
+      message: t('noSeparateSendMsg'),
       type: 'error',
       plain: true,
     })
@@ -201,15 +214,15 @@ async function sendEmail() {
 
   if (sending) {
     ElMessage({
-      message: '邮件正在发送中',
+      message: t('sendingErrorMsg'),
       type: 'error',
       plain: true,
     })
     return
   }
 
-  percentMessage =  ElMessage({
-    message: () => h(sendPercent, { value: percent.value }),
+  percentMessage = ElMessage({
+    message: () => h(sendPercent, {value: percent.value, desc: t('sending')}),
     dangerouslyUseHTMLString: true,
     plain: true,
     duration: 0,
@@ -217,7 +230,9 @@ async function sendEmail() {
   })
 
   sending = true
-  close()
+
+  show.value = false
+
   emailSend(form, (e) => {
     percent.value = Math.round((e.loaded * 98) / e.total)
   }).then(emailList => {
@@ -225,22 +240,33 @@ async function sendEmail() {
     emailList.forEach(item => {
       emailStore.sendScroll?.addItem(item)
     })
+
+    ElNotification({
+      title: t('sendSuccessMsg'),
+      type: "success",
+      message: h('span', {style: 'color: teal'}, email.subject),
+      position: 'bottom-right'
+    })
+
+    userStore.refreshUserInfo();
+
+    if (form.draftId) {
+      form.subject = ''
+      form.content = ''
+      form.receiveEmail = []
+      draftStore.setDraft = {...toRaw(form)}
+    }
+
     resetForm()
     show.value = false
-    ElNotification({
-      title: '邮件已发送',
-      type: "success",
-      message: h('span', { style: 'color: teal' }, email.subject),
-      position: 'bottom-right'
-    })
-    userStore.refreshUserInfo();
   }).catch((e) => {
     ElNotification({
-      title: '发送失败',
+      title: t('sendFailMsg'),
       type: e.code === 403 ? 'warning' : 'error',
-      message: h('span', { style: 'color: teal' }, e.message),
+      message: h('span', {style: 'color: teal'}, e.message),
       position: 'bottom-right'
     })
+    show.value = true
   }).finally(() => {
     percentMessage.close()
     percent.value = 0
@@ -255,8 +281,13 @@ function resetForm() {
   form.content = ''
   form.manyType = null
   form.attachments = []
-  form.sendType = null
+  form.sendType = ''
   form.emailId = 0
+  form.draftId = null
+  backReply.content = ''
+  backReply.subject = ''
+  backReply.receiveEmail = []
+  backReply.sendType = ''
   editor.value.clearEditor()
 }
 
@@ -283,7 +314,7 @@ function openReply(email) {
     <div></div>
     <div>
     <br>
-        ${ formatDetailDate(email.createTime) }，${email.name} &lt${email.sendEmail}&gt 来信:
+        ${formatDetailDate(email.createTime)} ${email.name} &lt${email.sendEmail}&gt ${t('wrote')}:
     </div>
     <blockquote class="mceNonEditable" style="margin: 0 0 0 0.8ex;border-left: 1px solid rgb(204,204,204);padding-left: 1ex;">
       <articl>
@@ -291,7 +322,13 @@ function openReply(email) {
       </article>
     </blockquote>`
     open()
-    console.log(defValue.value)
+
+    nextTick(() => {
+      backReply.content = editor.value.getContent()
+      backReply.subject = form.subject
+      backReply.receiveEmail = form.receiveEmail
+      backReply.sendType = form.sendType
+    })
   })
 
 }
@@ -299,8 +336,7 @@ function openReply(email) {
 function formatImage(content) {
   content = content || '';
   const domain = settingStore.settings.r2Domain;
-  console.log(content)
-  return  content.replace(/{{domain}}/g, domain + '/');
+  return content.replace(/{{domain}}/g, domain + '/');
 }
 
 function open() {
@@ -313,6 +349,14 @@ function open() {
     form.accountId = accountStore.currentAccount.accountId;
     form.name = accountStore.currentAccount.name;
   }
+  show.value = true;
+  editor.value.focus()
+}
+
+function openDraft(draft) {
+  Object.assign(form, {...draft})
+  defValue.value = ''
+  setTimeout(() => defValue.value = form.content)
   show.value = true;
   editor.value.focus()
 }
@@ -332,7 +376,53 @@ onUnmounted(() => {
 });
 
 function close() {
-  show.value = false;
+
+  if (form.draftId) {
+    draftStore.setDraft = {...toRaw(form)}
+    show.value = false
+    resetForm()
+    return;
+  }
+
+  if (!(form.content || form.subject || form.receiveEmail.length > 0)) {
+    show.value = false
+    resetForm()
+    return;
+  }
+
+  if (backReply.sendType === 'reply') {
+    let subjectFlag = form.subject === backReply.subject
+    let contentFlag = editor.value.getContent() === backReply.content
+    let receiveFlag = form.receiveEmail.length === 1 && form.receiveEmail[0] === backReply.receiveEmail[0]
+    if (subjectFlag && contentFlag && receiveFlag) {
+      resetForm();
+      close()
+      return;
+    }
+  }
+
+  ElMessageBox.confirm(t('saveDraftConfirm'), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
+    type: 'warning',
+    distinguishCancelAndClose: true
+  }).then(async () => {
+    const formData = {...toRaw(form)}
+    delete formData.draftId
+    delete formData.attachments
+    formData.createTime = dayjs().utc().format('YYYY-MM-DD HH:mm:ss');
+    const draftId = await db.value.draft.add({...formData})
+    db.value.att.add({draftId, attachments: toRaw(form.attachments)})
+    draftStore.refreshList++
+    show.value = false
+    resetForm()
+  }).catch((action) => {
+    if (action === 'cancel') {
+      show.value = false
+      resetForm()
+    }
+  })
+
 }
 
 </script>
@@ -349,8 +439,8 @@ function close() {
   justify-content: center;
 
   .write-box {
-    background: #FFFFFF;
-    width: min(1200px,calc(100% - 80px));
+    background: var(--el-bg-color);
+    width: min(1200px, calc(100% - 80px));
     box-shadow: var(--el-box-shadow-light);
     border: 1px solid var(--el-border-color-light);
     transition: var(--el-transition-duration);
@@ -388,7 +478,7 @@ function close() {
 
       .sender-name {
         margin-left: 8px;
-        font-weight: bold;
+        font-weight: bold;;
       }
 
       .send-email {

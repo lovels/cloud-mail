@@ -5,13 +5,16 @@ import settingService from '../service/setting-service';
 import attService from '../service/att-service';
 import constant from '../const/constant';
 import fileUtils from '../utils/file-utils';
-import { attConst, emailConst, isDel, settingConst } from '../const/entity-const';
+import { emailConst, isDel, roleConst, settingConst } from '../const/entity-const';
 import emailUtils from '../utils/email-utils';
 import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
-dayjs.extend(utc)
-dayjs.extend(timezone)
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+import roleService from '../service/role-service';
+import verifyUtils from '../utils/verify-utils';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 export async function email(message, env, ctx) {
 
@@ -26,14 +29,14 @@ export async function email(message, env, ctx) {
 			forwardEmail,
 			ruleEmail,
 			ruleType,
-			r2Domain
+			r2Domain,
+			noRecipient
 		} = await settingService.query({ env });
 
 		if (receive === settingConst.receive.CLOSE) {
 			return;
 		}
 
-		const account = await accountService.selectByEmailIncludeDelNoCase({ env: env }, message.to);
 
 		const reader = message.raw.getReader();
 		let content = '';
@@ -45,6 +48,61 @@ export async function email(message, env, ctx) {
 		}
 
 		const email = await PostalMime.parse(content);
+
+		const account = await accountService.selectByEmailIncludeDel({ env: env }, message.to);
+
+		if (!account && noRecipient === settingConst.noRecipient.CLOSE) {
+			return;
+		}
+
+		if (account && account.email !== env.admin) {
+
+			let { banEmail, banEmailType, availDomain } = await roleService.selectByUserId({ env: env }, account.userId);
+
+			if(!roleService.hasAvailDomainPerm(availDomain, message.to)) {
+				return;
+			}
+
+			banEmail = banEmail.split(',').filter(item => item !== '');
+
+			for (const item of banEmail) {
+
+				if (verifyUtils.isDomain(item)) {
+
+					const banDomain = item.toLowerCase();
+					const receiveDomain = emailUtils.getDomain(email.from.address.toLowerCase());
+
+					if (banDomain === receiveDomain) {
+
+						if (banEmailType === roleConst.banEmailType.ALL) return;
+
+						if (banEmailType === roleConst.banEmailType.CONTENT) {
+							email.html = 'The content has been deleted';
+							email.text = 'The content has been deleted';
+							email.attachments = [];
+						}
+
+					}
+
+				} else {
+
+					if (item.toLowerCase() === email.from.address.toLowerCase()) {
+
+						if (banEmailType === roleConst.banEmailType.ALL) return;
+
+						if (banEmailType === roleConst.banEmailType.CONTENT) {
+							email.html = 'The content has been deleted';
+							email.text = 'The content has been deleted';
+							email.attachments = [];
+						}
+
+					}
+
+				}
+
+			}
+
+		}
 
 		const toName = email.to.find(item => item.address === message.to)?.name || '';
 
